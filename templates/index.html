@@ -390,7 +390,7 @@
 					},
 					definedTypes: ['黄金', '股票型', '债券型', '混合型'],
 					specialFunds: {
-						'004253': { ratio: 250 }, // 基金004253，换算比例为250
+						'004253': { ratio: 260 }, // 基金004253，换算比例为260
 					},
 					currentPage: 1,
 					pageSize: 20,
@@ -744,42 +744,47 @@
 						// this.filteredFunds = [];
 					}
 				},
-				calculateGoldPriceAndNetValue () {  // 计算黄金型基金的金价和单位净值
+				calculateValues () {  // 计算基金的金价和单位净值
 					const money = parseFloat(this.transaction.money);
-					const value = parseFloat(this.transaction.value);
-					const g = parseFloat(this.transaction.g);
-					// console.log(money, value, g);
-					const fundCode = this.transaction.code;
 
 					if (this.fundType === '黄金') {
+						const fundCode = this.transaction.code;
 						const specialFund = this.specialFunds[fundCode];
 						const ratio = specialFund ? specialFund.ratio : 285; // 默认换算比例为285
 
-						if (money && g) {  // 输入money和g，计算price和value
-							this.transaction.price = (money / g).toFixed(4);
-							this.transaction.value = (this.transaction.price / ratio).toFixed(4);
-						} else if (money && value) {  // 输入money和value，计算price和g
-							this.transaction.price = (value * ratio).toFixed(4);
-							this.transaction.g = (money / this.transaction.price).toFixed(4);
-						}
-					} else { // 其他类型
-						this.calculateNetValue();
-					}
-				},
-				calculateNetValue () {  // 计算其他基金的单位净值
-					const money = parseFloat(this.transaction.money);
-					const num = parseFloat(this.transaction.num);
-					// console.log(money, num);
+						const g = parseFloat(this.transaction.g);
+						const value = parseFloat(this.transaction.value);
+						const price = parseFloat(this.transaction.price);
 
-					// 计算单位净值
-					if (money && num && num !== 0) {
-						this.transaction.value = (money / num).toFixed(4);
-					} else {
-						this.transaction.value = '';
+						if (specialFund) {  // g => num，value + radio => price, money + price => g
+							if (g) {
+								this.transaction.num = g;
+							}
+							if (value) {
+								this.transaction.price = (value * ratio).toFixed(4);
+							}
+							if (money && price) {
+								this.transaction.g = (money / price).toFixed(4);
+							}
+						} else {  // 非特殊黄金 money + g => price, price + radio => value
+							if (money && g) {  // 输入money和g，计算price和value
+								this.transaction.price = (money / g).toFixed(4);
+								this.transaction.value = (price / ratio).toFixed(4);
+							}
+						}
+					} else { // 非黄金类型
+						const num = parseFloat(this.transaction.num);
+
+						if (money && num && num !== 0) {
+							this.transaction.value = (money / num).toFixed(4);
+						} else {
+							this.transaction.value = '';
+						}
 					}
 				},
 				addTransaction () {  // 添加交易记录
 					let is_valid = 1; // 默认为有效
+					const currentPage = this.currentPage; // 保存当前页码
 
 					if (!this.transaction.code || !this.transaction.type || !this.transaction.date) {
 						this.$message.warning('请填写完整交易信息');
@@ -800,11 +805,10 @@
 						transactionData.value = this.transaction.value;
 					}
 
-					if (this.fundType !== '黄金') {
-						if (this.transaction.num) {
-							transactionData.num = this.transaction.num;
-						}
-					} else {
+					if (this.transaction.num) {
+						transactionData.num = this.transaction.num;
+					}
+					if (this.fundType === '黄金') {
 						if (this.transaction.g) {
 							transactionData.g = this.transaction.g;
 						}
@@ -849,6 +853,7 @@
 									value: '',
 									commission: ''
 								};
+								this.currentPage = currentPage; // 恢复页码
 							} else {
 								this.$message.error('添加交易记录失败: ' + data.error);
 							}
@@ -934,9 +939,12 @@
 				},
 
 				refreshAllData () {  // 刷新所有数据
+					const currentPage = this.currentPage;
 					this.loadFunds();
+
 					this.$message.success('数据刷新成功');
-					this.currentPage = localStorage.getItem("lastpage") || 1;
+					this.currentPage = currentPage; // 恢复页码
+					// this.currentPage = localStorage.getItem("lastpage") || 1;
 				},
 				importCSV () {  // 导入CSV文件
 					if (!this.selectedFile) {
@@ -988,14 +996,15 @@
 				// this.$watch('transaction.num', this.calculateNetValue);
 			},
 			watch: {
-				// fundType (newType) {  // 监听fundType的变化
-				// 切换基金类型时清空输入框
-				// this.transaction.money = '';
-				// this.transaction.num = '';
-				// this.transaction.g = '';
-				// this.transaction.price = '';
-				// this.transaction.value = '';
-
+				// fundType (newType) {  // 监听 fundType 的变化
+				selectedFund () {  // 监听 selectedFund 的变化
+					// 切换基金类型时清空输入框
+					this.transaction.money = '';
+					this.transaction.num = '';
+					this.transaction.g = '';
+					this.transaction.price = '';
+					this.transaction.value = '';
+				},
 				// // 根据新的基金类型动态添加或移除监听器
 				// if (newType === '黄金') {
 				// 	this.$watch('transaction.money', this.calculateGoldPriceAndNetValue);
@@ -1006,8 +1015,13 @@
 				// 	this.$watch('transaction.num', this.calculateNetValue);
 				// }
 				// },
+				'transaction.money': 'calculateValues',
+				'transaction.num': 'calculateValues',
+				'transaction.g': 'calculateValues',
+				'transaction.value': 'calculateValues',
 				currentPage (newPage) {  // 监听当前页码的变化
 					console.log(this.currentPage);
+					this.$watch('currentPage', this.handlePageChange);
 				}
 			}
 		});
