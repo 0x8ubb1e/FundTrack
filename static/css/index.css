@@ -1,0 +1,164 @@
+body {
+	margin: 0;
+	padding: 0;
+	font-family: Arial, sans-serif;
+	background-color: #f5f7fa;
+}
+
+.container {
+	max-width: 1440px;
+	margin: 0 auto;
+	padding: 20px;
+	display: flex;
+	flex-direction: row;
+	position: relative;
+}
+
+.sidebar {
+	width: 250px;
+	background-color: #fff;
+	border-radius: 8px;
+	box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+	margin-right: 20px;
+	padding: 20px;
+	position: sticky;
+	top: 20px;
+	height: calc(100vh - 40px);
+	overflow-y: auto;
+}
+
+.darkmode,
+.darkmode button {
+	background-color: transparent;
+}
+
+.fund-item {
+	padding: 10px;
+	border-bottom: 1px solid #eaeaea;
+	cursor: pointer;
+	transition: background-color 0.3s;
+}
+
+.fund-item:hover {
+	background-color: #f5f7fa;
+}
+
+.fund-item.active {
+	background-color: #e1f0ff;
+	font-weight: bold;
+}
+
+.main-content {
+	flex: 1;
+	padding: 0 20px;
+}
+
+.header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid #eaeaea;
+}
+
+.card {
+	position: relative;
+	background-color: #fff;
+	border-radius: 8px;
+	box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+	margin-bottom: 20px;
+	padding: 20px;
+}
+
+.card h3 {
+	margin-top: 0;
+}
+
+.chart-container {
+	height: 400px;
+}
+
+.transaction-table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.transaction-table th,
+.transaction-table td {
+	border: 1px solid #eaeaea;
+	padding: 8px;
+	text-align: center;
+}
+
+.transaction-table th {
+	background-color: #f5f7fa;
+}
+
+.transaction-table .buy {
+	color: #F56C6C;
+	/* 红色 - 买入 */
+}
+
+.transaction-table .sell {
+	color: #67C23A;
+	/* 绿色 - 卖出 */
+}
+
+.transaction-table .fixed {
+	color: #409EFF;
+	/* 蓝色 - 定投 */
+}
+
+.transaction-table .dividend {
+	color: #E6A23C;
+	/* 橙色 - 分红 */
+}
+
+.transaction-table .non-valid {
+	color: #999;
+	/* 灰色 - 非法 */
+}
+
+.empty-state {
+	text-align: center;
+	padding: 20px;
+	color: #999;
+}
+
+.refresh-container {
+	position: absolute;
+	top: 20px;
+	right: 20px;
+	margin-bottom: 10px;
+}
+
+.transaction-form-row {
+	margin-bottom: 15px;
+}
+
+.transaction-form-row label {
+	display: inline-block;
+	width: 80px;
+	text-align: right;
+	margin-right: 10px;
+}
+
+.transaction-form-row input,
+.transaction-form-row select,
+.transaction-form-row button {
+	padding: 8px;
+	border: 1px solid #eaeaea;
+	border-radius: 4px;
+}
+
+.transaction-form-row button {
+	background-color: #409EFF;
+	color: white;
+	border: none;
+	cursor: pointer;
+}
+
+.el-button {
+	padding: 8px;
+}

@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>基金交易记录</title>
+	<link rel="icon" href="data:;base64,=">
+	<link rel="stylesheet" href="https://unpkg.com/element-ui/lib/theme-chalk/index.css">
+	<!-- <link rel="stylesheet" :href="currentCssFile"> -->
+	<link rel="stylesheet" href="static/css/dark.css" id="theme-link">
+</head>
+
+<body>
+	<div id="app">
+		<div class="container">
+			<div class="sidebar">
+				<h3>基金列表</h3>
+				<div class="darkmode" style="position: absolute; right: 30px; top:  30px; border-radius: 50%;">
+					<el-button @click="toggleDarkMode" style="border-radius: 50%;">
+						<i v-if="!isDarkMode" class="el-icon-sunny"></i>
+						<i v-else class="el-icon-moon"></i>
+					</el-button>
+				</div>
+				<div>
+					<el-button type="primary" @click="showAllFunds">All</el-button>
+					<el-button type="success" @click="showFundsByType('黄金')">黄金</el-button>
+					<el-button type="info" @click="showFundsByType('股票型')">股票型</el-button>
+					<el-button type="success" @click="showFundsByType('债券型')">债券型</el-button>
+					<el-button type="info" @click="showFundsByType('混合型')">混合型</el-button>
+					<el-button type="danger" @click="showFundsByType('其他类型')">其他类型</el-button>
+					<!-- 添加更多分类按钮 -->
+				</div>
+				<div class="fund-item" v-for="fund in displayedFunds" :key="fund.id"
+					:class="{ active: selectedFund === fund.id }" @click="selectFund(fund.id)">
+					{{ fund.name }} ({{ fund.id }})
+				</div>
+			</div>
+
+			<div class="main-content">
+				<div class="header">
+					<h1>基金交易记录</h1>
+					<div>
+						<el-button type="primary" @click="showImportDialog = true" icon="el-icon-upload2">导入CSV</el-button>
+						<el-button type="info" @click="refreshAllData" icon="el-icon-refresh">刷新</el-button>
+					</div>
+				</div>
+
+				<div v-if="!selectedFund">
+					<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+						<h2 v-if="!selectedFundType">所有基金的交易记录</h2>
+						<h2 v-else>{{ selectedFundType }} 基金的交易记录</h2>
+						<div>
+							<span style="margin-right: 15px;">共 {{ transactions.length }} 条记录</span>
+						</div>
+					</div>
+
+
+					<table class="transaction-table">
+						<thead>
+							<tr>
+								<th>序号</th>
+								<th>基金名称</th>
+								<th>交易类型</th>
+								<th>日期</th>
+								<th>金额</th>
+								<th>份额/克数</th>
+								<th>金价</th>
+								<th>单位净值</th>
+								<th>手续费</th>
+								<th>操作</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="(transaction, index) in paginatedTransactions" :key="transaction.id"
+								:class="transaction.class">
+								<td>{{ (currentPage - 1) * pageSize + index + 1 }}</td>
+								<td>{{ transaction.fundId}} | {{ transaction.fundName }}</td>
+								<td>
+									<!-- class="buy"  class="sell"  class="fixed" class="dividend" -->
+									<span v-if="transaction.type === '0'">
+										<i class="el-icon-message"></i> 买入
+									</span>
+									<span v-else-if="transaction.type === '1'">
+										<i class="el-icon-bell"></i> 卖出
+									</span>
+									<span v-else-if="transaction.type === '2'">
+										<i class="el-icon-monitor"></i> 定投
+									</span>
+									<span v-else-if="transaction.type === '3'">
+										<i class="el-icon-coin"></i> 分红
+									</span>
+									<span v-else>
+										<i class="el-icon-more"></i> 其他
+									</span>
+								</td>
+								<td>{{ transaction.date }}</td>
+								<td v-if="transaction.money">{{ Number(transaction.money).toFixed(2) }}</td>
+								<td v-else>{{ transaction.money }}</td>
+								<td v-if="transaction.fundType !== '黄金'">
+									<span v-if="transaction.num">{{ Number(transaction.num).toFixed(2) }}</span>
+									<span v-else>{{ transaction.num }}</span>
+								</td>
+								<td v-else>
+									<span v-if="transaction.g">{{ Number(transaction.g).toFixed(4) }}</span>
+									<span v-else>{{ transaction.g }}</span>
+								</td>
+								<td v-if="transaction.fundType === '黄金'">
+									<span v-if="transaction.price">{{ Number(transaction.price).toFixed(4) }}</span>
+									<span v-else>{{ transaction.price }}</span>
+								</td>
+								<td v-else></td>
+								<td v-if="transaction.value">{{ Number(transaction.value).toFixed(4) }}</td>
+								<td v-else>{{ transaction.value }}</td>
+								<td v-if="transaction.commission">{{ Number(transaction.commission).toFixed(2) }}</td>
+								<td v-else>{{ transaction.commission }}</td>
+
+								<td>
+									<el-button type="text" size="small" @click="deleteTransaction(transaction)">
+										<i class="el-icon-delete"></i> 删除
+									</el-button>
+								</td>
+							</tr>
+
+							<!-- 添加交易记录表单 -->
+							<tr>
+								<td>{{ transactions.length + 1 }}</td>
+								<td>
+									<el-select v-model="transaction.code" placeholder="请输入基金代码或名称" filterable remote
+										:remote-method="searchFunds" @change="selectFundFromList">
+										<el-option v-for="fund in filteredFunds" :key="fund.id" :label="`${fund.id}|${fund.name}`"
+											:value="fund.id">
+											<span style="float: left; color: #8492a6; font-size: 13px">{{ fund.id }}|{{ fund.name }}</span>
+										</el-option>
+									</el-select>
+								</td>
+								<td>
+									<el-select v-model="transaction.type" placeholder="请选择交易类型">
+										<el-option label="买入" value="0"><i class="el-icon-message"></i> 买入</el-option>
+										<el-option label="卖出" value="1"><i class="el-icon-bell"></i> 卖出</el-option>
+										<el-option label="定投" value="2"><i class="el-icon-monitor"></i> 定投</el-option>
+										<el-option label="分红" value="3"><i class="el-icon-coin"></i> 分红</el-option>
+										<el-option label="分红" value="3"><i class="el-icon-more"></i> 其他</el-option>
+									</el-select>
+								</td>
+								<td>
+									<el-date-picker v-model="transaction.date" type="datetime" placeholder="选择日期和时间"
+										format="yyyy-MM-dd HH:mm:ss" value-format="yyyy-MM-dd HH:mm:ss">
+									</el-date-picker>
+								</td>
+								<td>
+									<el-input v-model="transaction.money" placeholder="请输入金额"></el-input>
+								</td>
+								<td v-if="fundType !== '黄金'">
+									<el-input v-model="transaction.num" placeholder="请输入份额/克数"></el-input>
+								</td>
+								<td v-else>
+									<el-input v-model="transaction.g" placeholder="请输入份额/克数"></el-input>
+								</td>
+								<td>
+									<el-input v-model="transaction.price" placeholder="请输入金价"></el-input>
+								</td>
+								<td>
+									<el-input v-model="transaction.value" placeholder="请输入单位净值"></el-input>
+								</td>
+								<td>
+									<el-input v-model="transaction.commission" placeholder="请输入手续费"></el-input>
+								</td>
+								<td>
+									<el-button type="text" size="small" @click="addTransaction">
+										<i class="el-icon-plus"></i> 添加
+									</el-button>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+
+					<!-- 分页组件 -->
+					<el-pagination v-if="transactions.length != 0" :current-page.sync="currentPage" :page-size="pageSize"
+						:total="transactions.length" layout="prev, pager, next" @current-change="handlePageChange"></el-pagination>
+				</div>
+
+				<div v-else>
+					<div class="card">
+						<h2>{{ selectedFundName }}</h2>
+						<span>{{ selectedFund }}</span>
+
+						<div class="refresh-container">
+							<el-button type="info" size="small" @click="refreshPredictions"
+								icon="el-icon-refresh-right">刷新预测数据</el-button>
+						</div>
+						<h3>净值预测</h3>
+						<div ref="predictChart" style="width: 100%; height: 300px;"></div>
+					</div>
+
+					<!-- 基金净值曲线 -->
+					<div class="card">
+						<div class="refresh-container">
+							<el-button type="info" size="small" @click="refreshNetValue"
+								icon="el-icon-refresh-right">刷新净值数据</el-button>
+						</div>
+						<h3>基金净值曲线</h3>
+						<div ref="netValueChart" style="width: 100%; height: 400px;"></div>
+					</div>
+
+					<!-- 交易记录 -->
+					<div class="card">
+						<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+							<h3>交易记录</h3>
+							<div>
+								<el-button type="info" size="small" @click="refreshTransactions"
+									icon="el-icon-refresh-right">刷新交易记录</el-button>
+								<span style="margin-left: 15px;">共 {{ transactions.length }} 条记录</span>
+							</div>
+						</div>
+
+						<table class="transaction-table">
+							<!-- 交易记录表格 -->
+							<thead>
+								<tr>
+									<th style="width: 100px;">交易类型</th>
+									<th>日期</th>
+									<th>金额</th>
+									<th v-if="fundType !== '黄金'">份额</th>
+									<th v-else>克数</th>
+									<th v-if="fundType === '黄金'">金价</th>
+									<th>单位净值</th>
+									<th>手续费</th>
+									<th>操作</th>
+								</tr>
+							</thead>
+
+							<tbody>
+								<!-- 现有交易记录 -->
+								<tr v-for="(transaction, index) in paginatedTransactions" :key="index" :class="transaction.class">
+									<td>
+										<!-- class="buy"  class="sell"  class="fixed" class="dividend" -->
+										<span v-if="transaction.type === '0'">
+											<i class="el-icon-message"></i> 买入
+										</span>
+										<span v-else-if="transaction.type === '1'">
+											<i class="el-icon-bell"></i> 卖出
+										</span>
+										<span v-else-if="transaction.type === '2'">
+											<i class="el-icon-monitor"></i> 定投
+										</span>
+										<span v-else-if="transaction.type === '3'">
+											<i class="el-icon-coin"></i> 分红
+										</span>
+										<span v-else>
+											<i class="el-icon-more"></i> 其他
+										</span>
+									</td>
+									<td>{{ transaction.date }}</td>
+									<td v-if="transaction.money">{{ Number(transaction.money).toFixed(2) }}</td>
+									<td v-else>{{ transaction.money }}</td>
+									<td v-if="fundType !== '黄金'">
+										<span v-if="transaction.num">{{ Number(transaction.num).toFixed(2) }}</span>
+										<span v-else>{{ transaction.num }}</span>
+									</td>
+									<td v-else>
+										<span v-if="transaction.g">{{ Number(transaction.g).toFixed(4) }}</span>
+										<span v-else>{{ transaction.g }}</span>
+									</td>
+									<td v-if="fundType === '黄金'">
+										<span v-if="transaction.price">{{ Number(transaction.price).toFixed(4) }}</span>
+										<span v-else>{{ transaction.price }}</span>
+									</td>
+									<td v-if="transaction.value">{{ Number(transaction.value).toFixed(4) }}</td>
+									<td v-else>{{ transaction.value }}</td>
+									<td v-if="transaction.commission">{{ Number(transaction.commission).toFixed(2) }}</td>
+									<td v-else>{{ transaction.commission }}</td>
+									<td style="display: flex;">
+										<!-- 添加无效按钮 -->
+										<el-button type="text" size="small" @click="toggleTransactionValidity(transaction)">
+											<i v-if="transaction.is_valid==0" class="el-icon-check"></i>
+											<i v-else class="el-icon-close"></i>
+										</el-button>
+
+										<!-- 添加删除按钮 -->
+										<el-button type="text" size="small" @click="deleteTransaction(transaction)">
+											<i class="el-icon-delete"></i>
+										</el-button>
+									</td>
+								</tr>
+
+								<!-- 添加交易记录表单 -->
+								<tr>
+									<td>
+										<el-select v-model="transaction.type" placeholder="请选择交易类型">
+											<el-option label="买入" value="0"><i class="el-icon-message"></i> 买入</el-option>
+											<el-option label="卖出" value="1"><i class="el-icon-bell"></i> 卖出</el-option>
+											<el-option label="定投" value="2"><i class="el-icon-monitor"></i> 定投</el-option>
+											<el-option label="分红" value="3"><i class="el-icon-coin"></i> 分红</el-option>
+											<el-option label="分红" value="3"><i class="el-icon-more"></i> 其他</el-option>
+										</el-select>
+									</td>
+									<td>
+										<el-date-picker v-model="transaction.date" type="datetime" placeholder="选择日期和时间"
+											format="yyyy-MM-dd HH:mm:ss" value-format="yyyy-MM-dd HH:mm:ss">
+										</el-date-picker>
+									</td>
+									<td>
+										<el-input v-model="transaction.money" placeholder="请输入金额"></el-input>
+									</td>
+									<td v-if="fundType !== '黄金'">
+										<el-input v-model="transaction.num" placeholder="请输入份额"></el-input>
+									</td>
+									<td v-else>
+										<el-input v-model="transaction.g" placeholder="请输入克数"></el-input>
+									</td>
+									<td v-if="fundType === '黄金'">
+										<el-input v-model="transaction.price" placeholder="请输入金价"></el-input>
+									</td>
+									<td>
+										<el-input v-model="transaction.value" placeholder="请输入单位净值"></el-input>
+									</td>
+									<td>
+										<el-input v-model="transaction.commission" placeholder="请输入手续费"></el-input>
+									</td>
+									<td>
+										<el-button type="text" size="small" @click="addTransaction">
+											<i class="el-icon-plus"></i> 添加
+										</el-button>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+
+						<div class="empty-state" v-if="transactions.length === 0">
+							暂无交易记录
+						</div>
+
+						<!-- 分页组件 -->
+						<el-pagination v-if="transactions.length != 0" :current-page.sync="currentPage" :page-size="pageSize"
+							:total="transactions.length" layout="prev, pager, next"
+							@current-change="handlePageChange"></el-pagination>
+					</div>
+				</div>
+
+			</div>
+		</div>
+
+		<!-- CSV导入对话框 -->
+		<el-dialog title="导入CSV文件" :visible.sync="showImportDialog" width="40%">
+			<el-upload class="upload-demo" drag action="" :auto-upload="false" :on-change="handleFileChange"
+				:file-list="fileList" accept=".csv">
+				<i class="el-icon-upload"></i>
+				<div class="el-upload__text">将文件拖到此处，或<em>点击上传</em></div>
+				<div class="el-upload__tip" slot="tip">只能上传CSV文件</div>
+			</el-upload>
+			<div style="margin-top: 20px;">
+				<el-button @click="showImportDialog = false">取消</el-button>
+				<el-button type="primary" @click="importCSV">导入</el-button>
+			</div>
+		</el-dialog>
+	</div>
+
+	<script src="https://unpkg.com/vue@2.6.14/dist/vue.js"></script>
+	<script src="https://unpkg.com/element-ui/lib/index.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+	<script>
+		new Vue({
+			el: '#app',
+			data () {
+				return {
+					funds: [],
+					selectedFund: '',
+					selectedFundName: '',
+					selectedFundType: '',  // 当前筛选的基金类型
+					fundType: '',  					// 默认为空，表示非黄金型基金
+					filteredFunds: [], 			// 用于存储搜索结果
+					transactions: [],
+					netValues: [],
+					predictions: [],
+					showImportDialog: false,
+					fileList: [],
+					selectedFile: null,
+					transaction: {
+						code: '',
+						type: '',
+						date: '',
+						money: '',
+						num: '',
+						g: '',
+						price: '',
+						value: '',
+						commission: '',
+						isValid: 1
+					},
+					definedTypes: ['黄金', '股票型', '债券型', '混合型'],
+					specialFunds: {
+						'004253': { ratio: 250 }, // 基金004253，换算比例为250
+					},
+					currentPage: 1,
+					pageSize: 20,
+					refreshInterval: null,
+					isDarkMode: true, // 控制暗黑模式的开关
+					currentCssFile: 'static/css/index.css', // 默认加载默认模式的CSS文件
+				};
+			},
+			beforeDestroy () {  // 清除定时器
+				if (this.refreshInterval) {
+					clearInterval(this.refreshInterval);
+				}
+			},
+			computed: {
+				paginatedTransactions () {  // 计算分页后的交易记录
+					const start = (this.currentPage - 1) * this.pageSize;
+					const end = start + this.pageSize;
+					return this.transactions.slice(start, end);
+				},
+				displayedFunds () {  // 根据类型筛选基金
+					if (this.selectedFundType === '其他类型') {
+						// 筛选出不属于已定义类型的基金
+						return this.funds.filter(fund => !fund.type || !this.definedTypes.some(type => fund.type.startsWith(type)));
+					} else if (this.selectedFundType) {
+						// 筛选出特定类型的基金
+						return this.funds.filter(fund => fund.type && fund.type.startsWith(this.selectedFundType));
+					} else {
+						// 显示全部基金
+						return this.funds;
+					}
+				}
+			},
+			created () {  // 创建定时器
+				this.currentPage = localStorage.getItem("lastpage") || 1;
+				this.handlePageChange();
+				this.loadFunds();
+				// 设置定时自动刷新
+				this.refreshInterval = setInterval(() => {
+					if (this.selectedFund) {
+						this.refreshNetValue();
+						this.refreshPredictions();
+						this.refreshTransactions();
+					}
+				}, 1000 * 60 * 5); // 每5分钟刷新一次
+			},
+			methods: {
+				showAllFunds () {  // 显示全部基金
+					this.selectedFundType = '';
+					this.selectedFund = ''; // 清空当前选中的基金
+					this.loadFundData();
+				},
+				showFundsByType (type) {  // 根据类型显示基金
+					this.selectedFundType = type;
+					this.selectedFund = ''; // 清空当前选中的基金
+					this.loadFundData();
+				},
+				selectFund (fundId) {  // 选择基金
+					this.selectedFund = fundId;
+					const fund = this.funds.find(f => f.id === fundId);
+					if (fund) {
+						this.selectedFundName = fund.name;
+						this.fundType = fund.type;
+						this.loadFundData();
+					}
+				},
+				loadFunds () {  // 加载基金列表
+					fetch('/api/funds')
+						.then(response => response.json())
+						.then(data => {
+							if (data.success) {
+								this.funds = data.data;
+								if (this.funds.length > 0) {
+									// 如果有默认选中的基金类型，则选择该类型的第一项
+									if (this.selectedFundType) {
+										const filteredFunds = this.funds.filter(fund => fund.type.startsWith(this.selectedFundType));
+										if (filteredFunds.length > 0) {
+											this.selectedFund = filteredFunds[0].id;
+											this.selectedFundName = filteredFunds[0].name;
+											this.fundType = filteredFunds[0].type;
+										}
+									}
+									// else {
+									// 	// 否则选择全部基金的第一项
+									// 	this.selectedFund = this.funds[0].id;
+									// 	this.selectedFundName = this.funds[0].name;
+									// 	this.fundType = this.funds[0].type;
+									// }
+									this.loadFundData();
+								}
+								this.isAllFundsSelected = this.selectedFundType === '';
+							} else {
+								this.$message.error('加载基金列表失败: ' + data.error);
+							}
+						})
+						.catch(error => {
+							this.$message.error('网络错误: ' + error.message);
+						});
+				},
+				loadFundData () {  // 加载基金数据
+					const fundId = this.selectedFund;
+					this.transaction.code = fundId;
+
+					this.refreshNetValue();
+					this.refreshPredictions();
+					this.refreshTransactions();
+				},
+				refreshNetValue () {  // 加载单位净值预测数据
+					const fundId = this.selectedFund;
+					fetch(`/api/net_value/${fundId}`)
+						.then(response => response.json())
+						.then(data => {
+							if (data.success) {
+								// 过滤掉无效数据
+								this.netValues = data.data.filter(item => item.is_valid === 1);
+								this.initNetValueChart();
+							} else {
+								this.$message.error('加载净值数据失败: ' + data.error);
+							}
+						})
+						.catch(error => {
+							this.$message.error('网络错误: ' + error.message);
+						});
+				},
+				initNetValueChart () {  // 初始化单位净值曲线图
+					const chartDom = this.$refs.netValueChart;
+					if (!chartDom) return;
+
+					const myChart = echarts.init(chartDom);
+
+					const option = {
+						title: {
+							text: '基金净值曲线'
+						},
+						tooltip: {
+							trigger: 'axis',
+							formatter: function (params) {
+								const param = params[0];
+								return `${param.name}<br>净值: ${parseFloat(param.value).toFixed(4)}`;
+							}
+						},
+						xAxis: {
+							type: 'category',
+							data: this.netValues.map(item => item.date)
+						},
+						yAxis: {
+							type: 'value',
+							name: '净值'
+						},
+						series: [{
+							data: this.netValues.map(item => parseFloat(item.value).toFixed(4)),
+							type: 'line',
+							smooth: true,
+							lineStyle: {
+								width: 2,
+								color: '#409EFF'
+							},
+							areaStyle: {
+								color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+									{ offset: 0, color: 'rgba(64, 158, 255, 0.5)' },
+									{ offset: 1, color: 'rgba(64, 158, 255, 0.1)' }
+								])
+							}
+						}]
+					};
+
+					myChart.setOption(option);
+
+					window.addEventListener('resize', () => {
+						myChart.resize();
+					});
+				},
+				refreshPredictions () {  // 加载预测净值预测数据
+					const fundId = this.selectedFund;
+					fetch(`/api/predict/${fundId}`)
+						.then(response => response.json())
+						.then(data => {
+							if (data.success) {
+								this.predictions = data.data;
+								this.initPredictChart();
+							} else {
+								this.$message.error('加载预测数据失败: ' + data.error);
+							}
+						})
+						.catch(error => {
+							this.$message.error('网络错误: ' + error.message);
+						});
+				},
+				initPredictChart () {  // 初始化预测净值折线图
+					const chartDom = this.$refs.predictChart;
+					if (!chartDom) return;
+
+					const myChart = echarts.init(chartDom);
+
+					const option = {
+						title: {
+							text: '净值预测'
+						},
+						tooltip: {
+							trigger: 'axis',
+							formatter: function (params) {
+								const param = params[0];
+								return `${param.name}<br>预测净值: ${parseFloat(param.value).toFixed(4)}`;
+							}
+						},
+						xAxis: {
+							type: 'category',
+							data: this.predictions.map(item => item.date)
+						},
+						yAxis: {
+							type: 'value',
+							name: '净值'
+						},
+						series: [{
+							data: this.predictions.map(item => parseFloat(item.value).toFixed(4)),
+							type: 'line',
+							smooth: true,
+							lineStyle: {
+								width: 2,
+								color: '#67C23A'
+							},
+							symbol: 'circle',
+							symbolSize: 8,
+							itemStyle: {
+								color: '#67C23A'
+							}
+						}]
+					};
+
+					myChart.setOption(option);
+
+					window.addEventListener('resize', () => {
+						myChart.resize();
+					});
+				},
+				refreshTransactions () {  // 加载交易记录
+					console.log(this.selectedFund, this.selectedFundType);
+					this.transactions = [];
+					if (!this.selectedFund) {  // 加载多个基金的交易记录
+						if (!this.selectedFundType) {  // 加载所有基金的交易记录
+							console.log("loadAllTransactions");
+							this.funds.forEach(fund => {
+								this.loadFundTransactions(fund.id).then(transactions => {
+									this.transactions = this.transactions.concat(transactions);
+
+									// 根据日期进行升序排序
+									// this.transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+									// this.transactions.sort((a, b) => new Date(a.date) - new Date(b.date) || a.type.localeCompare(b.type));
+									// this.transactions.sort((a, b) => new Date(a.date) - new Date(b.date) || (a.type === '1' ? -1 : b.type === '1' ? 1 : a.type.localeCompare(b.type)));
+
+									// 根据日期进行降序排序
+									this.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+								});
+							});
+						} else {  // 加载指定类型基金的交易记录
+							console.log("loadTransactionsByType" + this.selectedFundType);
+							this.funds.forEach(fund => {
+								if (fund.type.startsWith(this.selectedFundType) || (this.selectedFundType === '其他类型' && (!fund.type || !this.definedTypes.some(type => fund.type.startsWith(type))))) {
+									console.log();
+									console.log(fund.name, fund.type.startsWith(this.selectedFundType), this.selectedFundType === '其他类型', !fund.type, !this.definedTypes.some(type => fund.type.startsWith(type)));
+									this.loadFundTransactions(fund.id).then(transactions => {
+										this.transactions = this.transactions.concat(transactions);
+
+										// 根据日期进行升序排序
+										// this.transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+										// this.transactions.sort((a, b) => new Date(a.date) - new Date(b.date) || a.type.localeCompare(b.type));
+										// this.transactions.sort((a, b) => new Date(a.date) - new Date(b.date) || (a.type === '1' ? -1 : b.type === '1' ? 1 : a.type.localeCompare(b.type)));
+
+										// 根据日期进行降序排序
+										this.transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+									});
+								}
+							});
+						}
+					} else {  // 加载当前选中基金的交易记录
+						console.log("loadFundTransactions");
+						this.loadFundTransactions(this.selectedFund).then(transactions => {
+							this.transactions = transactions;
+						});
+					}
+				},
+				loadFundTransactions (fundId) {  // 加载指定基金的交易记录
+					return fetch(`/api/transactions/${fundId}`)
+						.then(response => response.json())
+						.then(data => {
+							if (data.success) {
+								// 获取基金信息
+								const fund = this.funds.find(f => f.id === fundId);
+								if (fund) {
+
+									// 过滤掉 is_valid 为 0 的记录
+									// const validTransactions = data.data.filter(item => item.is_valid === 1);
+									// const validTransactions = data.data;
+									// this.transactions = validTransactions.map(item => {
+
+									return data.data.map(item => {
+										const transactionClass = {
+											'0': 'buy',
+											'1': 'sell',
+											'2': 'fixed',
+											'3': 'dividend'
+										}[item.type] || '';
+
+										const isValid = item.is_valid;
+										const classList = isValid ? transactionClass : `${transactionClass} non-valid`;
+
+										return {
+											...item,
+											class: classList,
+											isValid: isValid,  			// 添加isValid字段用于标记是否有效
+											fundName: fund.name, 		// 添加基金名称
+											fundId: fund.id, 				// 添加基金ID
+											fundType: fund.type  		// 添加基金类型
+										};
+									});
+								} else {
+									this.$message.error('未找到基金信息');
+									return [];
+								}
+							} else {
+								this.$message.error('加载交易记录失败: ' + data.error);
+								return [];
+							}
+						})
+						.catch(error => {
+							this.$message.error('网络错误: ' + error.message);
+							return [];
+						});
+				},
+
+				searchFunds (query) {  // 搜索基金
+					if (query !== '') {
+						this.filteredFunds = this.funds.filter(fund =>
+							fund.id.includes(query) || fund.name.includes(query)
+						);
+						if (!this.filteredFunds) {
+							refreshAllData();
+							this.filteredFunds = this.funds.filter(fund =>
+								fund.id.includes(query) || fund.name.includes(query)
+							);
+						}
+					} else {
+						this.filteredFunds = [];
+					}
+				},
+				selectFundFromList (fundId) {  // 从列表中选择基金
+					const fund = this.funds.find(f => f.id === fundId);
+					if (fund) {
+						this.transaction.code = fund.id;
+						this.selectedFundName = fund.name;
+						this.fundType = fund.type;
+						// this.filteredFunds = [];
+					}
+				},
+				calculateGoldPriceAndNetValue () {  // 计算黄金型基金的金价和单位净值
+					const money = parseFloat(this.transaction.money);
+					const value = parseFloat(this.transaction.value);
+					const g = parseFloat(this.transaction.g);
+					// console.log(money, value, g);
+					const fundCode = this.transaction.code;
+
+					if (this.fundType === '黄金') {
+						const specialFund = this.specialFunds[fundCode];
+						const ratio = specialFund ? specialFund.ratio : 285; // 默认换算比例为285
+
+						if (money && g) {  // 输入money和g，计算price和value
+							this.transaction.price = (money / g).toFixed(4);
+							this.transaction.value = (this.transaction.price / ratio).toFixed(4);
+						} else if (money && value) {  // 输入money和value，计算price和g
+							this.transaction.price = (value * ratio).toFixed(4);
+							this.transaction.g = (money / this.transaction.price).toFixed(4);
+						}
+					} else { // 其他类型
+						this.calculateNetValue();
+					}
+				},
+				calculateNetValue () {  // 计算其他基金的单位净值
+					const money = parseFloat(this.transaction.money);
+					const num = parseFloat(this.transaction.num);
+					// console.log(money, num);
+
+					// 计算单位净值
+					if (money && num && num !== 0) {
+						this.transaction.value = (money / num).toFixed(4);
+					} else {
+						this.transaction.value = '';
+					}
+				},
+				addTransaction () {  // 添加交易记录
+					let is_valid = 1; // 默认为有效
+
+					if (!this.transaction.code || !this.transaction.type || !this.transaction.date) {
+						this.$message.warning('请填写完整交易信息');
+						return;
+					}
+
+					const transactionData = {
+						code: this.transaction.code,
+						type: this.transaction.type,
+						date: this.transaction.date
+					};
+
+					if (this.transaction.money) {
+						transactionData.money = this.transaction.money;
+					}
+
+					if (this.transaction.value) {
+						transactionData.value = this.transaction.value;
+					}
+
+					if (this.fundType !== '黄金') {
+						if (this.transaction.num) {
+							transactionData.num = this.transaction.num;
+						}
+					} else {
+						if (this.transaction.g) {
+							transactionData.g = this.transaction.g;
+						}
+
+						if (this.transaction.price) {
+							transactionData.price = this.transaction.price;
+						}
+					}
+
+					// 如果手续费为空，则不包含手续费字段
+					if (this.transaction.commission) {
+						transactionData.commission = this.transaction.commission;
+					}
+
+					// 检查是否填写了必要字段
+					if (!this.transaction.money || (!this.transaction.num && !this.transaction.g)) {
+						is_valid = 0; // 如果没有填写必要字段，设置为无效
+					}
+
+					transactionData.is_valid = is_valid;
+
+					fetch('/api/add_transaction', {
+						method: 'POST',
+						headers: {
+							'Content-Type': 'application/json'
+						},
+						body: JSON.stringify(transactionData)
+					})
+						.then(response => response.json())
+						.then(data => {
+							if (data.success) {
+								this.$message.success('交易记录添加成功');
+								this.refreshTransactions();
+								this.transaction = {
+									code: '',
+									type: '',
+									date: '',
+									money: '',
+									num: '',
+									g: '',
+									price: '',
+									value: '',
+									commission: ''
+								};
+							} else {
+								this.$message.error('添加交易记录失败: ' + data.error);
+							}
+						})
+						.catch(error => {
+							this.$message.error('网络错误: ' + error.message);
+						});
+				},
+				toggleTransactionValidity (transaction) {  // 切换交易记录的有效性
+					this.$confirm(`此操作将${transaction.isValid ? '标记该交易记录为无效' : '标记该交易记录为有效'}，是否继续 ? `, '提示', {
+						confirmButtonText: '确定',
+						cancelButtonText: '取消',
+						type: 'warning'
+					}).then(() => {
+						// 调用后端API更新记录的isValid字段
+						fetch('/api/toggle_validity', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json'
+							},
+							body: JSON.stringify({ id: transaction.id, is_valid: transaction.isValid })
+						})
+							.then(response => {
+								if (!response.ok) {
+									throw new Error('网络响应错误');
+								}
+								return response.json();
+							})
+							.then(data => {
+								if (data.success) {
+									this.$message.success(`记录已${transaction.isValid ? '标记为无效' : '标记为有效'}`);
+									// 刷新交易记录以更新状态
+									this.refreshTransactions();
+								} else {
+									this.$message.error('操作失败: ' + data.error);
+								}
+							})
+							.catch(error => {
+								this.$message.error('网络错误: ' + error.message);
+							});
+					}).catch(() => {
+						this.$message.info('已取消操作');
+					});
+				},
+				deleteTransaction (transaction) {  // 删除交易记录
+					this.$confirm('此操作将永久删除该交易记录, 是否继续?', '提示', {
+						confirmButtonText: '确定',
+						cancelButtonText: '取消',
+						type: 'warning'
+					}).then(() => {
+						// 实际删除逻辑需要调用后端API
+						fetch('/api/del_transaction', {
+							method: 'POST',
+							headers: {
+								'Content-Type': 'application/json'
+							},
+							body: JSON.stringify({ id: transaction.id })
+						})
+							.then(response => {
+								if (!response.ok) {
+									throw new Error('网络响应错误');
+								}
+								return response.json();
+							})
+							.then(data => {
+								if (data.success) {
+									this.$message.success('交易记录删除成功');
+									// 刷新交易记录以更新状态
+									this.refreshTransactions();
+								} else {
+									this.$message.error('删除失败: ' + data.error);
+								}
+							})
+							.catch(error => {
+								this.$message.error('网络错误: ' + error.message);
+							});
+					}).catch(() => {
+						this.$message({
+							type: 'info',
+							message: '已取消删除'
+						});
+					});
+				},
+
+				refreshAllData () {  // 刷新所有数据
+					this.loadFunds();
+					this.$message.success('数据刷新成功');
+					this.currentPage = localStorage.getItem("lastpage") || 1;
+				},
+				importCSV () {  // 导入CSV文件
+					if (!this.selectedFile) {
+						this.$message.warning('请先选择CSV文件');
+						return;
+					}
+
+					const formData = new FormData();
+					formData.append('file', this.selectedFile);
+
+					fetch('/api/import_csv', {
+						method: 'POST',
+						body: formData
+					})
+						.then(response => response.json())
+						.then(data => {
+							if (data.success) {
+								this.$message.success('CSV导入成功');
+								this.loadFunds();
+							} else {
+								this.$message.error('CSV导入失败: ' + data.error);
+							}
+						})
+						.catch(error => {
+							this.$message.error('网络错误: ' + error.message);
+						})
+						.finally(() => {
+							this.showImportDialog = false;
+							this.fileList = [];
+							this.selectedFile = null;
+						});
+				},
+				handleFileChange (file) {  // 处理文件选择
+					this.selectedFile = file.raw;
+				},
+				handlePageChange (page) {  // 处理分页
+					this.currentPage = page;
+					localStorage.setItem("lastpage", this.currentPage);
+				},
+				toggleDarkMode () {
+					this.isDarkMode = !this.isDarkMode;
+					// this.currentCssFile = this.isDarkMode ? 'static/css/dark.css' : 'static/css/index.css';
+					const themeLink = document.getElementById('theme-link');
+					themeLink.href = this.isDarkMode ? 'static/css/dark.css' : 'static/css/index.css';
+				},
+			},
+			mounted () {  // 默认加载非黄金型基金的监听器
+				// this.$watch('transaction.money', this.calculateNetValue);
+				// this.$watch('transaction.num', this.calculateNetValue);
+			},
+			watch: {
+				// fundType (newType) {  // 监听fundType的变化
+				// 切换基金类型时清空输入框
+				// this.transaction.money = '';
+				// this.transaction.num = '';
+				// this.transaction.g = '';
+				// this.transaction.price = '';
+				// this.transaction.value = '';
+
+				// // 根据新的基金类型动态添加或移除监听器
+				// if (newType === '黄金') {
+				// 	this.$watch('transaction.money', this.calculateGoldPriceAndNetValue);
+				// 	this.$watch('transaction.g', this.calculateGoldPriceAndNetValue);
+				// 	this.$watch('transaction.price', this.calculateGoldPriceAndNetValue);
+				// } else {
+				// 	this.$watch('transaction.money', this.calculateNetValue);
+				// 	this.$watch('transaction.num', this.calculateNetValue);
+				// }
+				// },
+				currentPage (newPage) {  // 监听当前页码的变化
+					console.log(this.currentPage);
+				}
+			}
+		});
+	</script>
+</body>
+
+</html>
