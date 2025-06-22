@@ -30,5 +30,5 @@ project
 │   └── index.html       # 主页面模板
 └── static
     └── js
-				└── app.js        # Vue.js前端逻辑
+	└── app.js        # Vue.js前端逻辑
 ```
